@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: expenses
+    // Document ID: auto-generated
+    // Fields:
+    //   - amount: number (required, > 0)
+    //   - category: string (required, 1-50 chars)
+    //   - description: string (optional, 0-200 chars)
+    //   - date: timestamp (required)
+    //   - uid: string (required, matches auth.uid)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isValidExpense(data) {
+      return data.keys().hasAll(['amount', 'category', 'date', 'uid']) &&
+             data.amount is number && data.amount > 0 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 50 &&
+             data.date is timestamp &&
+             data.uid is string && data.uid == request.auth.uid &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 200));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /expenses/{expenseId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidExpense(request.resource.data);
+      allow update: if isAuthenticated() && 
+                      resource.data.uid == request.auth.uid && 
+                      isValidExpense(request.resource.data) &&
+                      request.resource.data.uid == resource.data.uid; // UID immutable
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+  }
+}

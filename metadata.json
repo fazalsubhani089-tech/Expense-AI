@@ -1,0 +1,5 @@
+{
+  "name": "Expense Tracker AI",
+  "description": "A smart expense tracker that uses natural language to record and manage your daily spending with real-time syncing and grand totals.",
+  "requestFramePermissions": []
+}

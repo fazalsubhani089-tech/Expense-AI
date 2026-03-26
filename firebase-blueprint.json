@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "Expense": {
+      "title": "Expense",
+      "description": "A single expense record.",
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "number",
+          "description": "The amount spent."
+        },
+        "category": {
+          "type": "string",
+          "description": "The category of the expense (e.g., grocery, shopping)."
+        },
+        "description": {
+          "type": "string",
+          "description": "A brief description of the expense."
+        },
+        "date": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The date and time the expense occurred."
+        },
+        "uid": {
+          "type": "string",
+          "description": "The user ID of the owner."
+        }
+      },
+      "required": ["amount", "category", "date", "uid"]
+    }
+  },
+  "firestore": {
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Collection of user expenses."
+    }
+  }
+}
