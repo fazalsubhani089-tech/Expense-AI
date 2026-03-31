@@ -88,8 +88,7 @@ export default function App() {
 
     const q = query(
       collection(db, 'expenses'),
-      where('uid', '==', user.uid),
-      orderBy('date', 'desc')
+      where('uid', '==', user.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -97,7 +96,13 @@ export default function App() {
         id: doc.id,
         ...doc.data()
       })) as Expense[];
-      setExpenses(expenseList);
+      
+      // Sort client-side to avoid composite index requirement
+      const sortedExpenses = [...expenseList].sort((a, b) => 
+        b.date.toMillis() - a.date.toMillis()
+      );
+      
+      setExpenses(sortedExpenses);
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, 'expenses');
     });
@@ -125,7 +130,15 @@ export default function App() {
       path
     };
     console.error('Firestore Error:', JSON.stringify(errInfo));
-    setError("Something went wrong with the database. Please try again.");
+    // Show a more descriptive error message if it's a known issue like missing index
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('index')) {
+      setError("Database optimization in progress. Please try again in a moment.");
+    } else if (message.includes('permission')) {
+      setError("You don't have permission to perform this action.");
+    } else {
+      setError("Something went wrong with the database. Please try again.");
+    }
   };
 
   const handleLogin = async () => {
@@ -158,11 +171,19 @@ export default function App() {
       if (results && results.length > 0) {
         // Add all expenses to Firestore
         for (const result of results) {
+          let expenseDate: Date;
+          try {
+            expenseDate = new Date(result.date);
+            if (isNaN(expenseDate.getTime())) throw new Error("Invalid date");
+          } catch (e) {
+            expenseDate = new Date(); // Fallback to current date
+          }
+
           await addDoc(collection(db, 'expenses'), {
             amount: result.amount,
             category: result.category,
             description: result.description || '',
-            date: Timestamp.fromDate(new Date(result.date)),
+            date: Timestamp.fromDate(expenseDate),
             uid: user.uid
           });
         }
