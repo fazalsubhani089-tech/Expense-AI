@@ -18,7 +18,7 @@ import {
   signOut,
   User
 } from 'firebase/auth';
-import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO, addMonths } from 'date-fns';
 import { 
   Plus, 
   Trash2, 
@@ -48,10 +48,11 @@ export default function App() {
   const [prompt, setPrompt] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
-  // Date range filters - Defaulting to a wider range to show historical data
-  const [startDate, setStartDate] = useState<string>(format(new Date(2024, 0, 1), 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState<string>(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+  // Date range filters - Defaulting to show all historical data and future entries
+  const [startDate, setStartDate] = useState<string>(format(new Date(0), 'yyyy-MM-dd'));
+  const [endDate, setEndDate] = useState<string>(format(addMonths(new Date(), 12), 'yyyy-MM-dd'));
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -130,14 +131,19 @@ export default function App() {
       path
     };
     console.error('Firestore Error:', JSON.stringify(errInfo));
-    // Show a more descriptive error message if it's a known issue like missing index
     const message = error instanceof Error ? error.message : String(error);
-    if (message.includes('index')) {
-      setError("Database optimization in progress. Please try again in a moment.");
-    } else if (message.includes('permission')) {
-      setError("You don't have permission to perform this action.");
+    const lowerMessage = message.toLowerCase();
+    
+    if (lowerMessage.includes('index')) {
+      setError("Database optimization in progress. This happens when you add a lot of data. Please try again in 1-2 minutes.");
+    } else if (lowerMessage.includes('permission') || lowerMessage.includes('insufficient')) {
+      setError("You don't have permission to perform this action. Please check if you are logged in correctly.");
+    } else if (lowerMessage.includes('quota') || lowerMessage.includes('exceeded')) {
+      setError("Daily database limit reached (Free Tier). The limit will reset tomorrow. You can still view your data, but adding new records is paused.");
+    } else if (lowerMessage.includes('offline') || lowerMessage.includes('network')) {
+      setError("You seem to be offline or have a weak connection. Please check your internet.");
     } else {
-      setError("Something went wrong with the database. Please try again.");
+      setError(`Database Error: ${message.slice(0, 100)}... Please try again.`);
     }
   };
 
@@ -164,13 +170,21 @@ export default function App() {
 
     setIsParsing(true);
     setError(null);
+    setSuccessMessage(null);
     
     try {
       const results = await parseExpensePrompt(prompt, new Date().toISOString());
       
       if (results && results.length > 0) {
         // Add all expenses to Firestore
+        let addedCount = 0;
         for (const result of results) {
+          const amount = Number(result.amount);
+          if (isNaN(amount)) {
+            console.warn("Skipping invalid amount:", result.amount);
+            continue;
+          }
+
           let expenseDate: Date;
           try {
             expenseDate = new Date(result.date);
@@ -180,14 +194,22 @@ export default function App() {
           }
 
           await addDoc(collection(db, 'expenses'), {
-            amount: result.amount,
-            category: result.category,
-            description: result.description || '',
+            amount: amount,
+            category: (result.category || 'Uncategorized').slice(0, 100),
+            description: (result.description || '').slice(0, 2000),
             date: Timestamp.fromDate(expenseDate),
             uid: user.uid
           });
+          addedCount++;
         }
-        setPrompt('');
+        
+        if (addedCount > 0) {
+          setPrompt('');
+          setSuccessMessage(`Successfully added ${addedCount} transaction${addedCount > 1 ? 's' : ''}!`);
+          setTimeout(() => setSuccessMessage(null), 5000);
+        } else {
+          setError("No valid expenses found in your message.");
+        }
       } else {
         setError("I couldn't understand those expenses. Try something like 'Spent 500 on lunch today'.");
       }
@@ -469,16 +491,37 @@ export default function App() {
       {/* Chat Input Bar */}
       <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[#F5F5F0] via-[#F5F5F0] to-transparent">
         <div className="max-w-3xl mx-auto">
-          {error && (
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-4 p-4 bg-red-50 border border-red-100 text-red-600 text-sm rounded-2xl flex items-center justify-between"
-            >
-              <span>{error}</span>
-              <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">×</button>
-            </motion.div>
-          )}
+          <AnimatePresence>
+            {error && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="mb-4 p-4 bg-red-50 border border-red-100 text-red-600 text-sm rounded-2xl flex items-center justify-between shadow-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <TrendingDown className="w-4 h-4" />
+                  <span>{error}</span>
+                </div>
+                <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 font-bold text-lg px-2">×</button>
+              </motion.div>
+            )}
+
+            {successMessage && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="mb-4 p-4 bg-green-50 border border-green-100 text-green-600 text-sm rounded-2xl flex items-center justify-between shadow-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <TrendingUp className="w-4 h-4" />
+                  <span>{successMessage}</span>
+                </div>
+                <button onClick={() => setSuccessMessage(null)} className="text-green-400 hover:text-green-600 font-bold text-lg px-2">×</button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <form 
             onSubmit={handleSubmitPrompt}

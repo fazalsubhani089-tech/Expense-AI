@@ -29,11 +29,11 @@ service cloud.firestore {
 
     function isValidExpense(data) {
       return data.keys().hasAll(['amount', 'category', 'date', 'uid']) &&
-             data.amount is number && data.amount > 0 &&
-             data.category is string && data.category.size() >= 1 && data.category.size() <= 50 &&
+             data.amount is number &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 100 &&
              data.date is timestamp &&
              data.uid is string && data.uid == request.auth.uid &&
-             (!('description' in data) || (data.description is string && data.description.size() <= 200));
+             (!('description' in data) || (data.description is string && data.description.size() <= 2000));
     }
 
     // ===============================================================
