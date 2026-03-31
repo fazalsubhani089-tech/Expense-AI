@@ -49,6 +49,8 @@ export default function App() {
   const [isParsing, setIsParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [lastSynced, setLastSynced] = useState<Date | null>(null);
+  const APP_VERSION = "1.0.4"; // Incrementing version to verify deployment
   
   // Date range filters - Defaulting to show all historical data and future entries
   const [startDate, setStartDate] = useState<string>(format(new Date(0), 'yyyy-MM-dd'));
@@ -97,6 +99,9 @@ export default function App() {
         id: doc.id,
         ...doc.data()
       })) as Expense[];
+      
+      console.log(`Synced ${expenseList.length} expenses`);
+      setLastSynced(new Date());
       
       // Sort client-side to avoid composite index requirement
       const sortedExpenses = [...expenseList].sort((a, b) => 
@@ -214,11 +219,7 @@ export default function App() {
         setError("I couldn't understand those expenses. Try something like 'Spent 500 on lunch today'.");
       }
     } catch (err) {
-      if (err instanceof Error && err.message.includes("Gemini API Key")) {
-        setError(err.message);
-      } else {
-        handleFirestoreError(err, OperationType.CREATE, 'expenses');
-      }
+      handleFirestoreError(err, OperationType.CREATE, 'expenses');
     } finally {
       setIsParsing(false);
     }
@@ -243,6 +244,8 @@ export default function App() {
   });
 
   const allCategories = Array.from(new Set(expenses.map(e => e.category))).sort();
+
+  const grandTotal = expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
   const toggleCategory = (category: string) => {
     setSelectedCategories(prev => 
@@ -341,9 +344,14 @@ export default function App() {
               <h2 className="text-6xl font-serif font-light mb-2">
                 Rs. {totalExpense.toLocaleString()}
               </h2>
-              <p className="text-[#5A5A40] italic">
-                {format(parseISO(startDate), 'MMM d')} — {format(parseISO(endDate), 'MMM d, yyyy')}
-              </p>
+              <div className="flex items-center gap-4 text-[#5A5A40] text-sm italic">
+                <p>
+                  {format(parseISO(startDate), 'MMM d')} — {format(parseISO(endDate), 'MMM d, yyyy')}
+                </p>
+                {grandTotal !== totalExpense && (
+                  <span className="opacity-60">• Grand Total: Rs. {grandTotal.toLocaleString()}</span>
+                )}
+              </div>
             </div>
 
             <AnimatePresence>
@@ -555,7 +563,7 @@ export default function App() {
             </button>
           </form>
           <p className="text-center text-[10px] uppercase font-bold text-[#5A5A40] mt-4 tracking-[0.2em] opacity-40">
-            Powered by Gemini AI
+            Powered by Gemini AI • v{APP_VERSION} {lastSynced && `• Last Synced: ${format(lastSynced, 'HH:mm:ss')}`}
           </p>
         </div>
       </div>
