@@ -214,7 +214,11 @@ export default function App() {
         setError("I couldn't understand those expenses. Try something like 'Spent 500 on lunch today'.");
       }
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'expenses');
+      if (err instanceof Error && err.message.includes("Gemini API Key")) {
+        setError(err.message);
+      } else {
+        handleFirestoreError(err, OperationType.CREATE, 'expenses');
+      }
     } finally {
       setIsParsing(false);
     }
